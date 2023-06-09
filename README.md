@@ -5,6 +5,28 @@ This code repository contains an application designed to help users manage their
 # Purpose
 The purpose of this code is to provide a user-friendly interface for users to track and manage their Instagram unfollowers. It allows users to search for specific users, view search results, select users for unfollowing, manage whitelisted users, and track unfollowing actions through logs. The code aims to simplify the process of managing unfollowers on Instagram and provide a seamless user experience.
 
+# Usage Instructions
+Follow these steps to use the code:
+
+Step 1:  Log in to your Instagram account on Laptop,PC etc.
+
+Step 2:  Open the developer console in your web browser. You can do this by right-clicking on the page and selecting "Inspect" or by pressing Ctrl+Shift+J (Windows) or ⌘+⌥+I (Mac OS).
+
+Step 3:  Copy the code from the file named "Script".
+
+Step 4:  Paste the code into the developer console and press Enter.
+
+A user interface will appear with an initial screen.
+
+Click on the "RUN" button to start scanning for users who do not follow you back.
+
+The code will start printing the users who do not follow you back.
+
+Once the code finishes printing the users, the results screen will be displayed. This screen will show you the list of users who do not follow you back.
+
+If you wish to unfollow any of these users, you can select one or more users by clicking the checkbox next to each user.
+
+Please note that this code helps you identify users who do not follow you back on Instagram. The decision to unfollow any user is at your discretion.
 # Main Components
 The main components in this code include:
 
