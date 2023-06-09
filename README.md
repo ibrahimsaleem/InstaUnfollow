@@ -12,7 +12,7 @@ Step 1:  Log in to your Instagram account on Laptop,PC etc.
 
 Step 2:  Open the developer console in your web browser. You can do this by right-clicking on the page and selecting "Inspect" or by pressing Ctrl+Shift+J (Windows) or ⌘+⌥+I (Mac OS).
 
-Step 3:  Copy the code from the file named "Script".
+Step 3:  Copy the code from the file named "InstaUnfollowCode".
 
 Step 4:  Paste the code into the developer console and press Enter.
 
