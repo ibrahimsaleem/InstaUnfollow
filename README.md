@@ -27,6 +27,32 @@ Once the code finishes printing the users, the results screen will be displayed.
 
 If you wish to unfollow any of these users, you can select one or more users by clicking the checkbox next to each user.
 
+Tips:
+- Use **Select all filtered (all pages)** to bulk-select every user currently matching your filters/search.
+- Use **Clear selection** to instantly unselect everyone.
+- Use the **Selected Only** filter to show only the accounts you’ve checked (useful for reviewing before unfollowing).
+- Use **Public** / **Private** filters to narrow accounts by visibility.
+- Use the per-user gender selector (**? / M / F**) to manually tag accounts, then filter using **Male / Female / Unknown**.- Use **AUTO-TAG GENDER** (requires a Gemini API key) to automatically predict M/F/Unknown for all untagged accounts using AI — manual tags are never overwritten.
+
+# Gemini AI Auto-Tag Gender
+The tool integrates the **Google Gemini REST API** to automatically classify gender associations from account names in batches of 50.
+
+### How to use
+1. Get a free API key at [Google AI Studio](https://aistudio.google.com/app/apikey).
+2. Run the bookmarklet and complete a scan (click **RUN**).
+3. In the left sidebar, find the **GEMINI AI** section and paste your key into the password field — it is saved to `localStorage` and persists across sessions.
+4. Click **AUTO-TAG GENDER** — the tool processes all untagged accounts in batches and shows live progress toasts.
+
+### Model fallback
+Requests are tried in this order (cheapest/fastest first); if a model is unavailable or blocked, the next one is used automatically:
+1. `gemini-3-flash-preview`
+2. `gemini-3.1-flash-image-preview`
+3. `gemini-3.1-pro-preview`
+4. `gemini-3-pro-image-preview`
+
+### Privacy
+- The prompt is framed as *name-linguistics classification* — no personal data beyond display name/username is sent.
+- Your API key is stored only in your browser's `localStorage` under the key `iu_gemini_api_key` and is never transmitted anywhere other than directly to `generativelanguage.googleapis.com`.
 Please note that this code helps you identify users who do not follow you back on Instagram. The decision to unfollow any user is at your discretion.
 # Main Components
 The main components in this code include:
@@ -38,6 +64,8 @@ UnfollowLogContainer: A component that displays the unfollowing log and allows u
 
 # Functionality Overview
 Unfollowing Users: The code provides an "UNFOLLOW" button that triggers an unfollow confirmation dialog. Upon confirmation, selected users are unfollowed, and the application state is updated accordingly. The unfollowing process involves updating the status, initializing the unfollowing log, and applying filter options.
+
+Note: The unfollow log now treats non-2xx responses as failures and may show an HTTP status code (for example, 429 when you’re temporarily rate-limited).
 
 Searching Users: The code includes a search bar that dynamically updates the search term in the application state as the user types. Search results are rendered in the ResultsContainer component, with filtering options applied based on the search term.
 
