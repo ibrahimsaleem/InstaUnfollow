@@ -13,7 +13,8 @@
   const WHITELIST_KEY="iu_whitelisted-results";
   const GENDER_TAGS_KEY="iu_gender-tags";
   const GEMINI_KEY_STORAGE="iu_gemini_api_key";
-  const GEMINI_BATCH_SIZE=50;
+  const GEMINI_BATCH_SIZE_KEY="iu_gemini_batch_size";
+  const GEMINI_BATCH_SIZE_DEFAULT=50;
   const GEMINI_MODELS=[
     "gemini-3-flash-preview",
     "gemini-3.1-flash-image-preview",
@@ -197,6 +198,16 @@
     localStorage.setItem(GEMINI_KEY_STORAGE,key);
   }
 
+  function loadGeminiBatchSize(){
+    const raw=localStorage.getItem(GEMINI_BATCH_SIZE_KEY);
+    const n=parseInt(raw,10);
+    return (!isNaN(n)&&n>=1&&n<=200)?n:GEMINI_BATCH_SIZE_DEFAULT;
+  }
+
+  function saveGeminiBatchSize(n){
+    localStorage.setItem(GEMINI_BATCH_SIZE_KEY,String(n));
+  }
+
   function pagesFor(count){
     const pages=Math.ceil(count/RESULTS_PER_PAGE);
     return pages<1?1:pages;
@@ -309,6 +320,7 @@
     unfollowLog:[],
     logFilter:{showSucceeded:true,showFailed:true},
     geminiApiKey:loadGeminiKey(),
+    geminiBatchSize:loadGeminiBatchSize(),
   };
 
   function toast(text){
@@ -607,7 +619,8 @@
     if(untagged.length===0){alert("All users are already tagged.");return;}
 
     const chunks=[];
-    for(let i=0;i<untagged.length;i+=GEMINI_BATCH_SIZE) chunks.push(untagged.slice(i,i+GEMINI_BATCH_SIZE));
+    const batchSize=state.geminiBatchSize||GEMINI_BATCH_SIZE_DEFAULT;
+    for(let i=0;i<untagged.length;i+=batchSize) chunks.push(untagged.slice(i,i+batchSize));
 
     let taggedCount=0;
     const next={...(state.genderTags||{})};
@@ -807,8 +820,24 @@
       saveGeminiKey(v);
     });
     inner.appendChild(keyInput);
+
+    const batchLabel=el("label",{className:"badge m-small",style:"flex-direction:column;align-items:flex-start;gap:.25rem"});
+    batchLabel.appendChild(document.createTextNode("Batch size (1-200)"));
+    const batchInput=el("input",{type:"number",min:"1",max:"200",value:String(state.geminiBatchSize)});
+    batchInput.style.cssText="width:100%;background:transparent;border:1px solid var(--iu-border-2);border-radius:8px;color:inherit;padding:.3rem .5rem;font-size:.85rem";
+    batchInput.addEventListener("change",(e)=>{
+      let n=parseInt(e.currentTarget.value,10);
+      if(isNaN(n)||n<1) n=1;
+      if(n>200) n=200;
+      e.currentTarget.value=String(n);
+      state.geminiBatchSize=n;
+      saveGeminiBatchSize(n);
+    });
+    batchLabel.appendChild(batchInput);
+    inner.appendChild(batchLabel);
+
     const autoTagBtn=el("button",{className:"btn",text:"AUTO-TAG GENDER",disabled:state.status!=="scanning"||!state.geminiApiKey,onClick:()=>autoTagGender()});
-    autoTagBtn.style.cssText="width:100%;margin-bottom:.75rem";
+    autoTagBtn.style.cssText="width:100%;margin:.5rem 0 .75rem 0";
     inner.appendChild(autoTagBtn);
 
     const summary=el("div",{className:"grow"});
