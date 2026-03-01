@@ -321,6 +321,7 @@
     logFilter:{showSucceeded:true,showFailed:true},
     geminiApiKey:loadGeminiKey(),
     geminiBatchSize:loadGeminiBatchSize(),
+    scanCancelled:false,
   };
 
   function toast(text){
@@ -442,6 +443,7 @@
   async function startScan(){
     if(state.status!=="initial") return;
     state.status="scanning";
+    state.scanCancelled=false;
     state.percentage=0;
     state.page=1;
     state.searchTerm="";
@@ -471,27 +473,45 @@
     let totalCount=-1;
     let safetyCounter=0;
 
-    while(hasNext){
+    let retryCount=0;
+    while(hasNext && !state.scanCancelled){
       let edgeFollow;
       try{
         const res=await fetch(url);
         if(res.status===429){
+          retryCount=0;
           toast("Rate limited (HTTP 429). Sleeping 60s...");
           await sleep(60000);
           hideToast();
           continue;
         }
         if(!res.ok){
-          toast(`Scan request failed (HTTP ${res.status}). Retrying...`);
+          retryCount++;
+          if(retryCount>=5){
+            toast(`Scan stopped: HTTP ${res.status} after 5 retries.`);
+            await sleep(3000);
+            hideToast();
+            hasNext=false;
+            break;
+          }
+          toast(`Scan request failed (HTTP ${res.status}). Retrying (${retryCount}/5)...`);
           await sleep(5000);
           hideToast();
           continue;
         }
-
         const json=await res.json();
         edgeFollow=json?.data?.user?.edge_follow;
         if(!edgeFollow) throw new Error("Unexpected response shape");
+        retryCount=0;
       }catch(err){
+        retryCount++;
+        if(retryCount>=5){
+          toast("Scan stopped after 5 consecutive errors.");
+          await sleep(3000);
+          hideToast();
+          hasNext=false;
+          break;
+        }
         console.error(err);
         continue;
       }
@@ -525,6 +545,11 @@
       }
     }
 
+    if(state.scanCancelled){
+      state.scanCancelled=false;
+      render();
+      return;
+    }
     state.percentage=100;
     render();
   }
@@ -564,7 +589,16 @@
     state.logFilter={showSucceeded:true,showFailed:true};
     render();
 
-    const selectedUsers=state.results.filter(u=>state.selectedIds.has(u.id));
+    const whitelistIds=whitelistIdSet();
+    const selectedUsers=state.results.filter(u=>state.selectedIds.has(u.id)&&!whitelistIds.has(u.id));
+    if(selectedUsers.length===0){
+      toast("All selected users are whitelisted — nothing to unfollow.");
+      await sleep(2500);
+      hideToast();
+      state.status="scanning";
+      render();
+      return;
+    }
     let index=0;
     for(const user of selectedUsers){
       index+=1;
@@ -603,6 +637,40 @@
       }
     }
 
+    state.percentage=100;
+    render();
+  }
+
+  async function retryFailedUnfollows(){
+    if(state.status!=="unfollowing") return;
+    const failed=state.unfollowLog.filter(e=>e&&!e.unfollowedSuccessfully);
+    if(failed.length===0){alert("No failed unfollows to retry.");return;}
+    const csrf=getCookie("csrftoken");
+    if(!csrf){toast("Missing csrftoken cookie.");await sleep(2000);hideToast();return;}
+    state.unfollowLog=state.unfollowLog.filter(e=>e&&e.unfollowedSuccessfully);
+    state.percentage=0;
+    render();
+    let index=0;
+    for(const entry of failed){
+      index++;
+      state.percentage=Math.floor((index/failed.length)*100);
+      try{
+        const res=await fetch(unfollowUrl(entry.user.id),{
+          headers:{"content-type":"application/x-www-form-urlencoded","x-csrftoken":csrf},
+          method:"POST",mode:"cors",credentials:"include",
+        });
+        if(!res.ok){
+          state.unfollowLog=[...state.unfollowLog,{user:entry.user,unfollowedSuccessfully:false,statusCode:res.status}];
+        }else{
+          state.unfollowLog=[...state.unfollowLog,{user:entry.user,unfollowedSuccessfully:true}];
+        }
+      }catch(err){
+        console.error(err);
+        state.unfollowLog=[...state.unfollowLog,{user:entry.user,unfollowedSuccessfully:false}];
+      }
+      render();
+      if(index!==failed.length) await sleep(Math.floor(2000*Math.random())+4000);
+    }
     state.percentage=100;
     render();
   }
@@ -726,6 +794,8 @@
       if(state.status==="initial"){
         if(confirm("Go back to Instagram?")) location.reload();
       }else{
+        state.unfollowLog=[];
+        state.logFilter={showSucceeded:true,showFailed:true};
         state.status="initial";
         render();
       }
@@ -744,6 +814,10 @@
     right.appendChild(copyBtn);
 
     if(state.status==="scanning"){
+      if(state.percentage<100){
+        const cancelBtn=el("button",{className:"btn btn-danger",text:"CANCEL SCAN",onClick:()=>{state.scanCancelled=true;render();}});
+        right.appendChild(cancelBtn);
+      }
       right.appendChild(el("span",{className:"pill",text:`Selected: ${state.selectedIds.size}`}));
 
       const clearBtn=el("button",{className:"btn",text:"Clear",disabled:state.selectedIds.size===0,onClick:()=>clearSelection()});
@@ -753,7 +827,7 @@
 
       const selectAllLabel=el("label",{className:"badge"});
       const selectAllInput=el("input",{type:"checkbox",className:"toggle-all-checkbox"});
-      selectAllInput.disabled=state.percentage<100 || filteredAllNoSelectedOnly.length===0;
+      selectAllInput.disabled=filteredAllNoSelectedOnly.length===0;
       selectAllInput.checked=filteredAllNoSelectedOnly.length>0 && state.selectedIds.size===filteredAllNoSelectedOnly.length;
       selectAllInput.addEventListener("change",(e)=>{
         if(state.status!=="scanning") return;
@@ -843,6 +917,7 @@
     const summary=el("div",{className:"grow"});
     summary.appendChild(el("div",{className:"sidebar-title",text:"STATS"}));
     summary.appendChild(el("div",{className:"badge m-small",text:`Selected: ${state.selectedIds.size}`}));
+    summary.appendChild(el("div",{className:"badge m-small",text:`Whitelisted: ${state.whitelist.length}`}));
     summary.appendChild(el("div",{className:"badge m-small",text:`Displayed: ${filteredDisplayed.length}`}));
     summary.appendChild(el("div",{className:"badge m-small",text:`Filtered: ${filteredAll.length}`}));
     summary.appendChild(el("div",{className:"badge m-small",text:`Total: ${state.results.length}`}));
@@ -937,12 +1012,13 @@
         el("option",{value:"m",text:"M"}),
         el("option",{value:"f",text:"F"}),
       );
-      const cb=el("input",{type:"checkbox",className:"account-checkbox"});
-      cb.checked=state.selectedIds.has(user.id);
-      cb.addEventListener("change",(e)=>toggleSelect(user.id,e.currentTarget.checked));
-
       actions.appendChild(genderSelect);
-      actions.appendChild(cb);
+      if(state.currentTab!=="whitelisted"){
+        const cb=el("input",{type:"checkbox",className:"account-checkbox"});
+        cb.checked=state.selectedIds.has(user.id);
+        cb.addEventListener("change",(e)=>toggleSelect(user.id,e.currentTarget.checked));
+        actions.appendChild(cb);
+      }
 
       rowLabel.appendChild(avatarContainer);
       rowLabel.appendChild(meta);
@@ -970,6 +1046,10 @@
     };
     add("showSucceeded","Succeeded");
     add("showFailed","Failed");
+    const failedCount=state.unfollowLog.filter(e=>e&&!e.unfollowedSuccessfully).length;
+    const retryBtn=el("button",{className:"btn",text:`RETRY FAILED (${failedCount})`,disabled:failedCount===0,onClick:()=>retryFailedUnfollows()});
+    retryBtn.style.cssText="width:100%;margin-top:.5rem";
+    menu.appendChild(retryBtn);
     aside.appendChild(menu);
 
     const article=el("article",{className:"unfollow-log-container"});
@@ -1026,7 +1106,7 @@
       mainContent=el("button",{className:"run-scan",text:"RUN",onClick:()=>startScan()});
       overlay.appendChild(mainContent);
     }else if(state.status==="scanning"){
-      const filteredAll=computeFilteredUsers({ignoreSelectedOnly:false});
+      const filteredAll=state.filter.showSelectedOnly?filteredAllNoSelectedOnly.filter(u=>state.selectedIds.has(u.id)):filteredAllNoSelectedOnly;
       const sidebar=buildSidebar(filteredAll,filteredAllNoSelectedOnly);
       const results=buildResults(filteredAll,filteredAllNoSelectedOnly);
       mainContent=el("section",{className:"shell"},sidebar,results);
